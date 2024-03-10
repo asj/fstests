@@ -4456,6 +4456,32 @@ _get_file_extent_sector()
 	echo "$result"
 }
 
+_bdev_handle()
+{
+	local device=$(echo $1 | rev | cut -d"/" -f1 | rev)
+
+	test -e /sys/class/block/${device}/device/scsi_disk/ || \
+			_notrun "Failed to obtain sys block handle"
+
+	ls /sys/class/block/${device}/device/scsi_disk/
+}
+
+_has_bdev_sysfs_delete()
+{
+	local dev_path=$1
+	local device=$(echo $dev_path | rev | cut -d"/" -f1 | rev)
+	local delete_path=/sys/class/block/${device}/device/delete
+
+	test -e $delete_path
+}
+
+_require_scratch_bdev_delete()
+{
+	if ! _has_bdev_sysfs_delete $SCRATCH_DEV; then
+		_notrun "require scratch device sys delete support"
+	fi
+}
+
 # arg 1 is dev to remove and is output of the below eg.
 # ls -l /sys/class/block/sdd | rev | cut -d "/" -f 3 | rev
 _devmgt_remove()
