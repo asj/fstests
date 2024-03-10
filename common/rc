@@ -4383,6 +4383,32 @@ _get_file_extent_sector()
 	echo "$result"
 }
 
+devmgt_handle()
+{
+	local device=$(echo $1 | rev | cut -d"/" -f1 | rev)
+
+	test -e /sys/class/block/${device}/device/scsi_disk/ || \
+			_notrun "Failed to obtain sys block handle"
+
+	ls /sys/class/block/${device}/device/scsi_disk/
+}
+
+device_has_sys_delete()
+{
+	local dev_path=$1
+	local device=$(echo $dev_path | rev | cut -d"/" -f1 | rev)
+	local delete_path=/sys/class/block/${device}/device/delete
+
+	test -e $delete_path
+}
+
+_require_scratch_device_sys_delete()
+{
+	if ! device_has_sys_delete $SCRATCH_DEV; then
+		_notrun "require scratch device sys delete support"
+	fi
+}
+
 # arg 1 is dev to remove and is output of the below eg.
 # ls -l /sys/class/block/sdd | rev | cut -d "/" -f 3 | rev
 _devmgt_remove()
@@ -4437,6 +4463,16 @@ _devmgt_add()
 	else
 		echo "/dev/$dev is back online" >> $seqres.full
 	fi
+}
+
+device_sys_delete()
+{
+	local device_path=$1
+	local device=$(echo $device_path | rev | cut -d"/" -f1 | rev)
+	local host_name=$(realpath /sys/class/block/$device | rev | \
+							cut -d"/" -f3 | rev)
+
+	_devmgt_remove $host_name $device_path
 }
 
 _require_fstrim()
