@@ -1,0 +1,112 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test 742
+#
+# Test for disappearing device after the device mount
+#
+. ./common/preamble
+_begin_fstest quick clone volume tempfsid
+
+# No auto group there might need manual operation/reboot
+# Override the default cleanup function.
+_cleanup()
+{
+	local new_device_recovery_handle
+
+	cd /
+	rm -r -f $tmp.*
+	$UMOUNT_PROG $mnt1 &> /dev/null
+	rm -r -f $mnt1
+	$UMOUNT_PROG $SCRATCH_MNT &> /dev/null
+
+	if [[ ! -b $new_scratch_dev ]]; then
+		echo "_cleanup: Need to reboot to bring back the scratch device"
+		return
+	fi
+
+	new_device_recovery_handle=$(devmgt_handle $new_scratch_dev)
+	_devmgt_remove  $new_device_recovery_handle $new_scratch_dev
+	_devmgt_add $new_device_recovery_handle
+
+	[[ -b $SCRATCH_DEV ]]  || echo "_cleanup: failed to bring back scratch device. pls reboot"
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+_supported_fs generic
+_require_test
+_require_scratch
+_require_cp_reflink
+_require_scratch_device_sys_delete
+_require_scratch_nocheck
+
+mnt1=$TEST_DIR/$seq/mnt1
+rm -r -f $mnt1
+mkdir -p $mnt1
+
+_scratch_mkfs >> /dev/null
+
+scratch_fsid=$(blkid --probe --match-tag UUID $SCRATCH_DEV | \
+	$AWK_PROG '{print $2}' | sed -e 's/UUID=//g' | sed -e 's/\"//g')
+echo SCRATCH_DEV=$SCRATCH_DEV scratch_fsid=$scratch_fsid >> $seqres.full
+stat $SCRATCH_DEV >> $seqres.full
+
+_scratch_mount
+$XFS_IO_PROG -fc 'pwrite -S 0x61 0 9000' $SCRATCH_MNT/foo | _filter_xfs_io
+
+# makes sure data ondisk since the physical device is going to disappear
+sync
+
+echo mount the scratch device again on another mnt point
+# btrfs - pass
+# xfs   - pass
+# ext4  - pass
+_mount $SCRATCH_DEV $mnt1
+echo $?
+
+echo check both mounts share the same physical device
+# btrfs - pass
+# xfs   - pass
+# ext4  - fail
+_cp_reflink $SCRATCH_MNT/foo $mnt1/bar
+echo $?
+$UMOUNT_PROG $mnt1
+
+device_recovery_handle=$(devmgt_handle $SCRATCH_DEV)
+_devmgt_remove  $device_recovery_handle $SCRATCH_DEV
+_devmgt_add $device_recovery_handle
+new_scratch_dev=$(blkid -l -o device -t UUID=$scratch_fsid)
+
+[[ -b $new_scratch_dev ]] || _fail "new scratch not found"
+
+echo new_scratch_dev=$new_scratch_dev scratch_fsid=$scratch_fsid >> $seqres.full
+stat $new_scratch_dev >> $seqres.full
+
+echo Mount reappeared device whos older node is still mounted
+# btrfs - pass
+# xfs - fail 32
+# ext4 - pass
+_mount $new_scratch_dev $mnt1
+echo $?
+
+echo Check if reappeared device mount and original mount share physical device
+# btrfs - fail EIO
+# xfs - fail EIO
+# ext4 - fail EIO
+_cp_reflink $SCRATCH_MNT/foo $mnt1/new_bar
+echo $?
+
+echo unmounting disappeared device
+# btrfs - pass
+# xfs - pass
+# ext4 - pass
+$UMOUNT_PROG $SCRATCH_MNT
+echo $?
+
+# success, all done
+status=0
+exit
