@@ -1,0 +1,14 @@
+QA output created by 809
+wrote 9000/9000 bytes at offset 0
+XXX Bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
+mount the scratch device again on another mount point
+0
+check that both mounts share the same physical device
+0
+mount the reappeared device whose older node is still mounted
+good
+
+reappeared mount: verify shared device to avoid corruption
+good
+unmounting the disappeared device
+0

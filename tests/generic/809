@@ -1,0 +1,97 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test 809
+#
+# Test reappearing device after mounting the device.
+#
+. ./common/preamble
+_begin_fstest quick clone volume tempfsid
+
+# No auto group manual operation/reboot may be required.
+
+_cleanup()
+{
+	local new_device_recovery_handle
+
+	cd /
+	rm -r -f $tmp.*
+	$UMOUNT_PROG $mnt1 &> /dev/null
+	rm -r -f $mnt1
+	$UMOUNT_PROG $SCRATCH_MNT &> /dev/null
+
+	if [[ ! -b $new_scratch_dev ]]; then
+		echo "_cleanup: reboot to restore the scratch device"
+		return
+	fi
+
+	new_device_recovery_handle=$(_bdev_handle $new_scratch_dev)
+	_devmgt_remove  $new_device_recovery_handle $new_scratch_dev
+	_devmgt_add $new_device_recovery_handle
+
+	[[ -b $SCRATCH_DEV ]]  || \
+		echo "_cleanup: failed to restore scratch device. Please reboot"
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+_supported_fs generic
+_require_test
+_require_scratch
+_require_cp_reflink
+_require_scratch_bdev_delete
+_require_scratch_nocheck
+
+mnt1=$TEST_DIR/$seq/mnt1
+rm -r -f $mnt1
+mkdir -p $mnt1
+
+_scratch_mkfs >> /dev/null
+
+scratch_fsid=$(blkid --probe --match-tag UUID $SCRATCH_DEV | \
+	$AWK_PROG '{print $2}' | sed -e 's/UUID=//g' | sed -e 's/\"//g')
+stat $SCRATCH_DEV | grep -E "File:|Device:" >> $seqres.full
+
+_scratch_mount
+mountpoint --fs-devno $SCRATCH_MNT >> $seqres.full
+$XFS_IO_PROG -fc 'pwrite -S 0x61 0 9000' $SCRATCH_MNT/foo | _filter_xfs_io
+
+_mount $SCRATCH_DEV $mnt1
+echo $?
+mountpoint --fs-devno $mnt1 >> $seqres.full
+
+# btrfs - pass
+# xfs   - pass
+# ext4  - fail
+_cp_reflink $SCRATCH_MNT/foo $mnt1/bar
+echo $?
+$UMOUNT_PROG $mnt1
+
+# makes sure data is on disk since the physical device is going to disappear
+sync
+
+device_recovery_handle=$(_bdev_handle $SCRATCH_DEV)
+_devmgt_remove  $device_recovery_handle $SCRATCH_DEV
+_devmgt_add $device_recovery_handle
+new_scratch_dev=$(blkid -l -o device -t UUID=$scratch_fsid)
+
+[[ -b $new_scratch_dev ]] || _fail "new scratch not found"
+[[ "$(lsblk -ndo MAJ:MIN /dev/sda)" != "$(lsblk -ndo MAJ:MIN /dev/sdb)" ]] || \
+	_not_run "Can't get the device reappear with different maj:min"
+
+stat $new_scratch_dev | grep -E "File:|Device:" >> $seqres.full
+
+[[ $FSTYP == "xfs" ]] && $UMOUNT_PROG $SCRATCH_MNT
+
+# Mount the reappeared device whose older node is still mounted (except for xfs)
+_mount $new_scratch_dev $mnt1 &> $seqres.full 
+echo $?
+
+mountpoint --fs-devno $mnt1 >> $seqres.full
+
+# success, all done
+status=0
+exit
