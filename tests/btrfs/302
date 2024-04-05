@@ -15,7 +15,7 @@
 . ./common/preamble
 _begin_fstest auto quick snapshot subvol
 
-. ./common/filter
+. ./common/filter.btrfs
 
 _supported_fs btrfs
 _require_scratch
@@ -46,7 +46,7 @@ $FSSUM_PROG -A -f -w $fssum_file $SCRATCH_MNT/subvol
 # Now create a snapshot of the subvolume and make it accessible from within the
 # subvolume.
 $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT/subvol \
-		 $SCRATCH_MNT/subvol/snap | _filter_scratch
+				 $SCRATCH_MNT/subvol/snap | _filter_snapshot
 
 # Now unmount and mount again the fs. We want to verify we are able to read all
 # metadata for the snapshot from disk (no IO failures, etc).

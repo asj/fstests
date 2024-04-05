@@ -43,7 +43,7 @@ send_receive_tempfsid()
 
 	$XFS_IO_PROG -fc 'pwrite -S 0x61 0 9000' ${src}/foo | _filter_xfs_io
 	$BTRFS_UTIL_PROG subvolume snapshot -r ${src} ${src}/snap1 | \
-						_filter_testdir_and_scratch
+							_filter_snapshot
 
 	echo Send ${src} | _filter_testdir_and_scratch
 	$BTRFS_UTIL_PROG send -f ${sendfile} ${src}/snap1 2>&1 | \

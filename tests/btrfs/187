@@ -17,7 +17,7 @@ _begin_fstest auto send dedupe clone balance
 
 # Import common functions.
 . ./common/attr
-. ./common/filter
+. ./common/filter.btrfs
 . ./common/reflink
 
 # real QA test starts here
@@ -152,7 +152,7 @@ done
 wait ${create_pids[@]}
 
 $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap1 \
-	| _filter_scratch
+							| _filter_snapshot
 
 # Add some more files, so that that are substantial differences between the
 # two test snapshots used for an incremental send later.
@@ -184,7 +184,7 @@ done
 wait ${setxattr_pids[@]}
 
 $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap2 \
-	| _filter_scratch
+							| _filter_snapshot
 
 full_send_loop 5 &
 full_send_pid=$!

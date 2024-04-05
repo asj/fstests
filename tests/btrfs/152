@@ -11,7 +11,7 @@
 _begin_fstest auto quick metadata qgroup send
 
 # Import common functions.
-. ./common/filter
+. ./common/filter.btrfs
 
 # real QA test starts here
 _supported_fs btrfs
@@ -32,9 +32,9 @@ touch $SCRATCH_MNT/subvol{1,2}/foo
 
 # Create base snapshots and send them
 $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT/subvol1 \
-	$SCRATCH_MNT/subvol1/.snapshots/1 | _filter_scratch
+	$SCRATCH_MNT/subvol1/.snapshots/1 | _filter_snapshot
 $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT/subvol2 \
-	$SCRATCH_MNT/subvol2/.snapshots/1 | _filter_scratch
+	$SCRATCH_MNT/subvol2/.snapshots/1 | _filter_snapshot
 for recv in recv1_1 recv1_2 recv2_1 recv2_2; do
 	$BTRFS_UTIL_PROG send $SCRATCH_MNT/subvol1/.snapshots/1 2> /dev/null | \
 		$BTRFS_UTIL_PROG receive $SCRATCH_MNT/${recv} | _filter_scratch

@@ -156,5 +156,14 @@ _filter_device_add()
 
 }
 
+_filter_snapshot()
+{
+	# btrfs-progs commit 5f87b467a9e7 ("btrfs-progs: subvolume: output the
+	# prompt line only when the ioctl succeeded") changed the output for
+	# btrfs subvolume snapshot, ensure that the latest fstests continue to
+	# work on older btrfs-progs without the above commit.
+	_filter_testdir_and_scratch | sed -e "s/Create a/Create/g"
+}
+
 # make sure this script returns success
 /bin/true
