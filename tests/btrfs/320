@@ -20,9 +20,9 @@ _require_btrfs_qgroup_report
 _basic_test()
 {
 	echo "=== basic test ===" >> $seqres.full
-	_run_btrfs_util_prog subvolume create $SCRATCH_MNT/a
-	_run_btrfs_util_prog quota enable $SCRATCH_MNT/a
-	_run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
+	_btrfs subvolume create $SCRATCH_MNT/a
+	_btrfs quota enable $SCRATCH_MNT/a
+	_btrfs quota rescan -w $SCRATCH_MNT
 	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT a)
 	$BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep $subvolid >> \
 		$seqres.full 2>&1
