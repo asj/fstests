@@ -107,7 +107,7 @@ static int get_io_sizes(int fd)
 		offset += pos ? 0 : 1;
 	alloc_size = offset;
 done:
-	fprintf(stdout, "Allocation size: %ld\n", alloc_size);
+	fprintf(stdout, "Allocation size: %d\n", alloc_size);
 	return 0;
 
 fail:
@@ -482,7 +482,7 @@ static int test17(int fd, int testnum)
 	if (pagesz < 4 * alloc_size) {
 		fprintf(stdout, "Test skipped as page size (%d) is less than "
 			"four times allocation size (%d).\n",
-			pagesz, (int)alloc_size);
+			pagesz, alloc_size);
 		goto out;
 	}
 	bufsz = alloc_size;
@@ -1259,7 +1259,7 @@ static int test_basic_support(void)
 			fprintf(stderr, "File system does not support fallocate.\n");
 		} else {
 			fprintf(stderr, "ERROR %d: Failed to preallocate "
-				"space to %ld bytes. Aborting.\n", errno, (long) alloc_size);
+				"space to %d bytes. Aborting.\n", errno, alloc_size);
 			ret = -1;
 		}
 		goto out;
