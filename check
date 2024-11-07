@@ -935,6 +935,15 @@ function run_section()
 			continue
 		fi
 
+		# Reload the module after each test to check for leaks or
+		# other problems.
+		if [ -n "${TEST_FS_MODULE_RELOAD}" ]; then
+			_test_unmount 2> /dev/null
+			_scratch_unmount 2> /dev/null
+			modprobe -r fs-$FSTYP
+			modprobe fs-$FSTYP
+		fi
+
 		# record that we really tried to run this test.
 		if ((!${#loop_status[*]})); then
 			try+=("$seqnum")
@@ -1031,15 +1040,6 @@ function run_section()
 				(_adjust_oom_score 250; _save_coredump "$i")
 				tc_status="fail"
 			done
-		fi
-
-		# Reload the module after each test to check for leaks or
-		# other problems.
-		if [ -n "${TEST_FS_MODULE_RELOAD}" ]; then
-			_test_unmount 2> /dev/null
-			_scratch_unmount 2> /dev/null
-			modprobe -r fs-$FSTYP
-			modprobe fs-$FSTYP
 		fi
 
 		# Scan for memory leaks after every test so that associating
