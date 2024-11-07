@@ -937,11 +937,12 @@ function run_section()
 
 		# Reload the module after each test to check for leaks or
 		# other problems.
-		if [ -n "${TEST_FS_MODULE_RELOAD}" ]; then
+		if [[ -n "${TEST_FS_MODULE_RELOAD}" ||
+		      -n "${FS_MODULE_RELOAD_OPTIONS}" ]]; then
 			_test_unmount 2> /dev/null
 			_scratch_unmount 2> /dev/null
 			modprobe -r fs-$FSTYP
-			modprobe fs-$FSTYP
+			modprobe fs-$FSTYP ${FS_MODULE_RELOAD_OPTIONS}
 		fi
 
 		# record that we really tried to run this test.
