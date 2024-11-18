@@ -811,6 +811,11 @@ function run_section()
 	test -n "$REPORT_GCOV" && _gcov_reset
 	needwrap=true
 
+	# Ensure the loaded module is free of issues before starting the first
+	# testcase if we are using TEST_FS_MODULE_RELOAD to test for any issues
+	# (leaks).
+	_unmount_and_reload_fs_module
+
 	if [ ! -z "$SCRATCH_DEV" ]; then
 	  _scratch_unmount 2> /dev/null
 	  # call the overridden mkfs - make sure the FS is built
@@ -1018,13 +1023,10 @@ function run_section()
 		fi
 
 		# Reload the module after each test to check for leaks or
-		# other problems.
-		if [ -n "${TEST_FS_MODULE_RELOAD}" ]; then
-			_test_unmount 2> /dev/null
-			_scratch_unmount 2> /dev/null
-			modprobe -r fs-$FSTYP
-			modprobe fs-$FSTYP
-		fi
+		# other problems. This reload is intentionally placed after
+		# the test case, ensuring any problem is reported with $seq
+		# still pointing to the leaking test.
+		_unmount_and_reload_fs_module
 
 		# Scan for memory leaks after every test so that associating
 		# a leak to a particular test will be as accurate as possible.
