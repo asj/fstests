@@ -37,6 +37,17 @@ _reload_fs_module()
 	test -n "${had_testfs}" && _test_mount 2> /dev/null
 }
 
+_unmount_and_reload_fs_module()
+{
+	if [[ -n "${TEST_FS_MODULE_RELOAD}" ]]; then
+		_test_unmount 2> /dev/null
+		_scratch_unmount 2> /dev/null
+		_reload_module fs-$FSTYP
+		modprobe -r fs-$FSTYP
+		modprobe fs-$FSTYP
+	fi
+}
+
 # Check that we have a module that can be loaded.  This module MUST NOT
 # be the module that underlies the filesystem.
 _require_loadable_module()
