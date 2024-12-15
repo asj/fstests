@@ -22,7 +22,14 @@ _require_scratch_shutdown
 _require_metadata_journaling
 _require_test_program "t_open_tmpfiles"
 
-_scratch_mkfs "-l size=256m" >> $seqres.full 2>&1
+# For XFS, creating and then unlinking 50000 files is journal space bound when
+# using default 64MB logs on small test filesystems. Increasing the journal size
+# to 256MB halved the runtime of this test.
+if [ $FSTYP = "xfs" ]; then
+    _scratch_mkfs "-l size=256m" >> $seqres.full 2>&1
+else
+    _scratch_mkfs >> $seqres.full 2>&1
+fi
 _scratch_mount
 
 # Set ULIMIT_NOFILE to min(file-max / 2, 50000 files per LOAD_FACTOR)
