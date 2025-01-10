@@ -1,0 +1,3 @@
+FSTYP=ext4
+MKFS_OPTIONS="-F -b 4096"
+MOUNT_OPTIONS="-o block_validity "

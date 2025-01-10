@@ -1,0 +1,3 @@
+FSTYP=xfs
+MKFS_OPTIONS="-b size=4096"
+MOUNT_OPTIONS=" "

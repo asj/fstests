@@ -1,0 +1,3 @@
+FSTYP=xfs
+MKFS_OPTIONS="-f "
+MOUNT_OPTIONS="-o usrquota,grpquota,prjquota"
