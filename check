@@ -80,6 +80,7 @@ check options
     -I <n>		iterate the test list <n> times, but stops iterating further in case of any test failure
     -d			dump test output to stdout
     -b			brief test summary
+    -c			use fs configs from configs/<fstype>/<config> e.g. configs/xfs/4k
     -R fmt[,fmt]	generate report in formats specified. Supported formats: xunit, xunit-quiet
     --large-fs		optimise scratch device for large filesystems
     -s section		run only specified section from config file
@@ -116,6 +117,14 @@ excluded from the list of tests to run from that test dir.
 external_file argument is a path to a single file containing a list of tests
 to exclude in the form of <test dir>/<test name>.
 
+-c can be used in various formats as mentioned below. We can also set the
+FS_CONFIG_OPTION environment variable in the local.config file and get the
+same functionality. e.g.
+    1) FS_CONFIG_OPTION=xfs/4k
+    2) FS_CONFIG_OPTION=configs/xfs/4k
+Please note that cmdline will take precedence if FS_CONFIG_OPTION is
+passed in both local.config file and via cmdline.
+
 examples:
  check xfs/001
  check -g quick
@@ -123,6 +132,9 @@ examples:
  check -x stress xfs/*
  check -X .exclude -g auto
  check -E ~/.xfstests.exclude
+ check -c xfs/4k,ext4/1k
+ check -c xfs/4k -c configs/ext4/1k
+ check -c $(echo configs/xfs/* | tr ' ' ',') -q 5 tests/selftest/007
 '
 	    exit 1
 }
@@ -312,6 +324,8 @@ while [ $# -gt 0 ]; do
 		;;
 	-s)	RUN_SECTION="$RUN_SECTION $2"; shift ;;
 	-S)	EXCLUDE_SECTION="$EXCLUDE_SECTION $2"; shift ;;
+	-c)	CMD_FS_CONFIG_OPTION="$CMD_FS_CONFIG_OPTION$2,";
+		export OPTIONS_HAVE_FSCONFIGS=true; shift ;;
 	-l)	diff="diff" ;;
 	-udiff)	diff="$diff -u" ;;
 
@@ -458,7 +472,7 @@ _wipe_counters()
 
 _global_log() {
 	echo "$1" >> $check.log
-	if $OPTIONS_HAVE_SECTIONS; then
+	if options_have_sections_or_fs_configs; then
 		echo "$1" >> ${REPORT_DIR}/check.log
 	fi
 }
@@ -532,7 +546,7 @@ _wrapup()
 				}' \
 				| sort -n >$tmp.out
 			mv $tmp.out $check.time
-			if $OPTIONS_HAVE_SECTIONS; then
+			if options_have_sections_or_fs_configs; then
 				cp $check.time ${REPORT_DIR}/check.time
 			fi
 		fi
@@ -543,9 +557,14 @@ _wrapup()
 
 		echo "SECTION       -- $section" >>$tmp.summary
 		echo "=========================" >>$tmp.summary
-
 		_global_log "SECTION       -- $section"
 		_global_log "=========================" >>$tmp.summary
+
+		if [[ -n $FS_CONFIG_OPTION ]]; then
+			echo "FSCONFIG      -- $FS_CONFIG_OPTION" >> $tmp.summary
+			_global_log "FSCONFIG      -- $FS_CONFIG_OPTION"
+		fi
+
 		_global_log "$(_display_test_configuration)"
 		if ((${#try[*]} > 0)); then
 			local test_aggr_stats=$(_print_list loop_test_stats_per_section)
@@ -560,7 +579,7 @@ _wrapup()
 		fi
 
 		$interrupt && echo "Interrupted!" | tee -a $check.log
-		if $OPTIONS_HAVE_SECTIONS; then
+		if options_have_sections_or_fs_configs; then
 			$interrupt && echo "Interrupted!" | tee -a \
 				${REPORT_DIR}/check.log
 		fi
@@ -793,7 +812,7 @@ _detect_kmemleak
 _prepare_test_list
 fstests_start_time="$(date +"%F %T")"
 
-if $OPTIONS_HAVE_SECTIONS; then
+if options_have_sections_or_fs_configs; then
 	trap "_summary; exit \$status" 0 1 2 3 15
 else
 	trap "_wrapup; exit \$status" 0 1 2 3 15
@@ -802,6 +821,7 @@ fi
 function run_section()
 {
 	local section=$1 skip
+	local fsconfig=$2
 
 	OLD_FSTYP=$FSTYP
 	OLD_TEST_FS_MOUNT_OPTS=$TEST_FS_MOUNT_OPTS
@@ -834,7 +854,10 @@ function run_section()
 		fi
 	fi
 
-	get_next_config $section
+	# FS_CONFIG_OPTION (if provided) will only be set after get_next_config
+	# has run which will export the FS_CONFIG_OPTION, so that we can use it
+	# later
+	get_next_config $section $fsconfig
 	_canonicalize_devices
 
 	mkdir -p $RESULT_BASE
@@ -846,6 +869,10 @@ function run_section()
 
 	if $OPTIONS_HAVE_SECTIONS; then
 		echo "SECTION       -- $section"
+	fi
+
+	if $OPTIONS_HAVE_FSCONFIGS; then
+		echo "FSCONFIG      -- $FS_CONFIG_OPTION"
 	fi
 
 	sect_start=`_wallclock`
@@ -869,7 +896,12 @@ function run_section()
 		# TEST_DEV has been recreated, previous FSTYP derived from
 		# TEST_DEV could be changed, source common/rc again with
 		# correct FSTYP to get FSTYP specific configs, e.g. common/xfs
+		# sourcing common/rc can re-set FS_CONFIG_OPTION to the value in
+		# local.config file(if present). So store and restore the value of
+		# FS_CONFIG_OPTION which is there currently at this point.
+		local fs_config_tmp="$FS_CONFIG_OPTION"
 		. common/rc
+		export FS_CONFIG_OPTION="$fs_config_tmp"
 		_prepare_test_list
 	elif [ "$OLD_TEST_FS_MOUNT_OPTS" != "$TEST_FS_MOUNT_OPTS" ]; then
 		_test_unmount 2> /dev/null
@@ -953,10 +985,14 @@ function run_section()
 		# we don't include the tests/ directory in the name output.
 		export seqnum=${seq#$SRC_DIR/}
 		group=${seqnum%%/*}
+
+		REPORT_DIR="$RESULT_BASE"
 		if $OPTIONS_HAVE_SECTIONS; then
-			REPORT_DIR="$RESULT_BASE/$section"
-		else
-			REPORT_DIR="$RESULT_BASE"
+			REPORT_DIR="$REPORT_DIR/$section"
+		fi
+		if $OPTIONS_HAVE_FSCONFIGS; then
+			local fsconfig_subdir="${FS_CONFIG_OPTION//configs/''}"
+			REPORT_DIR="$REPORT_DIR/$fsconfig_subdir"
 		fi
 		export RESULT_DIR="$REPORT_DIR/$group"
 		seqres="$REPORT_DIR/$seqnum"
@@ -1172,14 +1208,28 @@ function run_section()
 	_scratch_unmount 2> /dev/null
 }
 
+prepare_fs_config_list()
+{
+	IFS=',' read -r -a CMD_FS_CONFIG_OPTION_LIST <<< "$CMD_FS_CONFIG_OPTION"
+	CMD_FS_OPTION_LIST_LEN=${#CMD_FS_CONFIG_OPTION_LIST[@]}
+	if [ $CMD_FS_OPTION_LIST_LEN -eq 0 ]; then
+		# Create an empty fsconfig "" to pass to run_section in iters loop
+		CMD_FS_CONFIG_OPTION_LIST=("")
+	fi
+}
+
+prepare_fs_config_list
+
 for ((iters = 0; iters < $iterations; iters++)) do
 	for section in $HOST_OPTIONS_SECTIONS; do
-		run_section $section
-		if [ "$sum_bad" != 0 ] && [ "$istop" = true ]; then
-			interrupt=false
-			status=`expr $sum_bad != 0`
-			exit
-		fi
+		for fsconfig in "${CMD_FS_CONFIG_OPTION_LIST[@]}"; do
+			run_section $section $fsconfig
+			if [ "$sum_bad" != 0 ] && [ "$istop" = true ]; then
+				interrupt=false
+				status=`expr $sum_bad != 0`
+				exit
+			fi
+		done
 	done
 done
 

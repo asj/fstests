@@ -329,6 +329,11 @@ if [ -x /usr/sbin/selinuxenabled ] && /usr/sbin/selinuxenabled; then
 	export SELINUX_MOUNT_OPTIONS
 fi
 
+options_have_sections_or_fs_configs()
+{
+	$OPTIONS_HAVE_SECTIONS || $OPTIONS_HAVE_FSCONFIGS
+}
+
 _common_mount_opts()
 {
 	case $FSTYP in
@@ -769,8 +774,32 @@ parse_config_section() {
 		| sed -n -e "/^\[$SECTION\]/,/^\s*\[/{/^[^#].*\=.*/p;}"`
 }
 
+parse_fs_config_option() {
+	local fs_config_option
+	if ! $OPTIONS_HAVE_FSCONFIGS; then
+		return 0
+	fi
+
+	if [ -f "$1" ]; then
+		fs_config_option=$1
+	elif [ -f configs/"$1" ]; then
+		fs_config_option=configs/"$1"
+	else
+		echo "Invalid FS_CONFIG_OPTION $1"
+		exit 1
+	fi
+
+	eval `sed -e 's/[[:space:]]*\=[[:space:]]*/=/g' \
+		-e 's/#.*$//' \
+		-e 's/[[:space:]]*$//' \
+		-e 's/^[[:space:]]*//' \
+		-e "s/^\([^=]*\)=\"\?'\?\([^\"']*\)\"\?'\?$/export \1=\"\2\"/" \
+		< $fs_config_option`
+}
+
 get_next_config() {
-	if [ ! -z "$CONFIG_INCLUDED" ] && ! $OPTIONS_HAVE_SECTIONS; then
+	local cmd_fs_config_option=$2
+	if [[ $CONFIG_INCLUDED && ! options_have_sections_or_fs_configs ]]; then
 		return 0
 	fi
 
@@ -803,6 +832,23 @@ get_next_config() {
 	fi
 
 	parse_config_section $1
+
+	# FS_CONFIG_OPTION can be set either via cmdline -c xfs/4k (through
+	# CMD_FS_CONFIG_OPTION) or can be set in section config file
+	# FS_CONFIG_OPTION=xfs/4k.
+	# Please note that FS_CONFIG_OPTION in the local.config file can be
+	# overridden by the value passed through the command line.
+	if [[ -n "$cmd_fs_config_option" ]]; then
+		export FS_CONFIG_OPTION=$cmd_fs_config_option
+	fi
+
+	if [[ -n "$FS_CONFIG_OPTION" ]]; then
+		export OPTIONS_HAVE_FSCONFIGS=true
+		parse_fs_config_option $FS_CONFIG_OPTION
+	else
+		export OPTIONS_HAVE_FSCONFIGS=false
+	fi
+
 	if [ ! -z "$OLD_FSTYP" ] && [ $OLD_FSTYP != $FSTYP ]; then
 		[ -z "$MOUNT_OPTIONS" ] && _mount_opts
 		[ -z "$TEST_FS_MOUNT_OPTS" ] && _test_mount_opts
@@ -886,7 +932,8 @@ get_next_config() {
 }
 
 if [ -z "$CONFIG_INCLUDED" ]; then
-	get_next_config `echo $HOST_OPTIONS_SECTIONS | cut -f1 -d" "`
+	get_next_config `echo $HOST_OPTIONS_SECTIONS | cut -f1 -d" "` \
+		`echo $CMD_FS_CONFIG_OPTION | cut -f1 -d","`
 	export CONFIG_INCLUDED=true
 
 	# Autodetect fs type based on what's on $TEST_DEV unless it's been set

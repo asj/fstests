@@ -108,9 +108,21 @@ MKFS_OPTIONS="-q -F -b1024"
 [ext4_nojournal]
 MKFS_OPTIONS="-q -F -b4096 -O ^has_journal"
 
+# we could also do like: FS_CONFIG_OPTION=ext4/1k
+[ext4_1k_bs_fsconfig]
+FS_CONFIG_OPTION=configs/ext4/1k
+
+# we could also do like: FS_CONFIG_OPTION=ext4/nojournal
+[ext4_nojournal_fsconfig]
+FS_CONFIG_OPTION=configs/ext4/nojournal
+
 [xfs_filesystem]
 MKFS_OPTIONS="-f"
 FSTYP=xfs
+
+# we could also do like: FS_CONFIG_OPTION=xfs/4k
+[xfs_4k_bs_fsconfig]
+FS_CONFIG_OPTION=configs/xfs/4k
 
 [ext3_filesystem]
 FSTYP=ext3
