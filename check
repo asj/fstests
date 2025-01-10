@@ -11,6 +11,7 @@ needsum=true
 try=()
 sum_bad=0
 bad=()
+is_bad_test=false
 notrun=()
 interrupt=true
 diff="diff -u"
@@ -27,6 +28,7 @@ DUMP_OUTPUT=false
 iterations=1
 istop=false
 loop_on_fail=0
+loop_unconditional=0
 exclude_tests=()
 
 # This is a global variable used to pass test failure text to reporting gunk
@@ -83,6 +85,7 @@ check options
     -s section		run only specified section from config file
     -S section		exclude the specified section from the config file
     -L <n>		loop tests <n> times following a failure, measuring aggregate pass/fail metrics
+    -q <n>		loop tests <n> times irrespective of a pass or a failure, measuring aggregate pass/fail metrics
 
 testlist options
     -g group[,group...]	include tests from these groups
@@ -341,7 +344,9 @@ while [ $# -gt 0 ]; do
 	-L)	[[ $2 =~ ^[0-9]+$ ]] || usage
 		loop_on_fail=$2; shift
 		;;
-
+	-q)	[[ $2 =~ ^[0-9]+$ ]] || usage
+		loop_unconditional=$(($2 - 1)); shift
+		;;
 	-*)	usage ;;
 	*)	# not an argument, we've got tests now.
 		have_test_arg=true ;;
@@ -356,6 +361,11 @@ while [ $# -gt 0 ]; do
 
 	shift
 done
+
+# -q <n> overrides -L <m>
+if [ "$loop_unconditional" -gt 0 ]; then
+	loop_on_fail=0
+fi
 
 # we need common/rc, that also sources common/config. We need to source it
 # after processing args, overlay needs FSTYP set before sourcing common/config
@@ -610,7 +620,7 @@ _expunge_test()
 }
 
 # retain files which would be overwritten in subsequent reruns of the same test
-_stash_fail_loop_files() {
+_stash_loop_files() {
 	local seq_prefix="${REPORT_DIR}/${1}"
 	local cp_suffix="$2"
 
@@ -634,10 +644,18 @@ _stash_test_status() {
 	fi
 
 	if ((${#loop_status[*]} > 0)); then
-		# continuing or completing rerun-on-failure loop
-		_stash_fail_loop_files "$test_seq" ".rerun${#loop_status[*]}"
+		# continuing or completing rerun loop
+		_stash_loop_files "$test_seq" ".rerun${#loop_status[*]}"
 		loop_status+=("$test_status")
-		if ((${#loop_status[*]} > loop_on_fail)); then
+
+		# only stash @bad result for initial failure in loop
+		if [[ "$test_status" == "fail" ]] && ! $is_bad_test; then
+			bad+=("$test_seq")
+			is_bad_test=true
+		fi
+
+		if ((loop_on_fail && ${#loop_status[*]} > loop_on_fail)) || \
+		   ((loop_unconditional && ${#loop_status[*]} > loop_unconditional)); then
 			printf "%s aggregate results across %d runs: " \
 				"$test_seq" "${#loop_status[*]}"
 			awk "BEGIN {
@@ -651,23 +669,30 @@ _stash_test_status() {
 				}'
 			echo
 			loop_status=()
+			is_bad_test=false
 		fi
-		return	# only stash @bad result for initial failure in loop
+		return
 	fi
 
 	case "$test_status" in
 	fail)
-		if ((loop_on_fail > 0)); then
-			# initial failure, start rerun-on-failure loop
-			_stash_fail_loop_files "$test_seq" ".rerun0"
+		# re-run if either of the loop argument is set
+		if ((loop_on_fail > 0)) || ((loop_unconditional > 0)); then
+			_stash_loop_files "$test_seq" ".rerun0"
 			loop_status+=("$test_status")
 		fi
 		bad+=("$test_seq")
+		is_bad_test=true
 		;;
 	list|notrun)
 		notrun+=("$test_seq")
 		;;
 	pass|expunge)
+		# re-run if loop_unconditional argument is set
+		if ((loop_unconditional > 0)); then
+			_stash_loop_files "$test_seq" ".rerun0"
+			loop_status+=("$test_status")
+		fi
 		;;
 	*)
 		echo "Unexpected test $test_seq status: $test_status"
@@ -858,7 +883,8 @@ function run_section()
 	seqres="$check"
 	_check_test_fs
 
-	loop_status=()	# track rerun-on-failure state
+	is_bad_test=false
+	loop_status=()	# track loop rerun state
 	local tc_status ix
 	local -a _list=( $list )
 	for ((ix = 0; ix < ${#_list[*]}; !${#loop_status[*]} && ix++)); do
