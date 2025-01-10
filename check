@@ -468,6 +468,25 @@ if [ -n "$REPORT_GCOV" ]; then
 	_gcov_check_report_gcov
 fi
 
+_print_list()
+{
+	local -n list=$1
+	local item
+	for item in "${list[@]}"; do
+		echo "$item"
+	done
+}
+
+_display_test_configuration()
+{
+	echo "FSTYP         -- `_full_fstyp_details`"
+	echo "PLATFORM      -- `_full_platform_details`"
+	if [ ! -z "$SCRATCH_DEV" ]; then
+		echo "MKFS_OPTIONS  -- `_scratch_mkfs_options`"
+		echo "MOUNT_OPTIONS -- `_scratch_mount_options`"
+	fi
+}
+
 _wrapup()
 {
 	seq="check"
@@ -505,11 +524,19 @@ _wrapup()
 
 		echo "SECTION       -- $section" >>$tmp.summary
 		echo "=========================" >>$tmp.summary
+
+		_global_log "SECTION       -- $section"
+		_global_log "=========================" >>$tmp.summary
+		_global_log "$(_display_test_configuration)"
 		if ((${#try[*]} > 0)); then
+			local test_aggr_stats=$(_print_list loop_test_stats_per_section)
 			if [ $brief_test_summary == "false" ]; then
+				[[ -n "$test_aggr_stats" ]] && echo "$test_aggr_stats" >> \
+					$tmp.summary
 				echo "Ran: ${try[*]}"
 				echo "Ran: ${try[*]}" >>$tmp.summary
 			fi
+			_global_log "$test_aggr_stats"
 			_global_log "Ran: ${try[*]}"
 		fi
 
@@ -539,12 +566,15 @@ _wrapup()
 			_global_log "Passed all ${#try[*]} tests"
 			echo "Passed all ${#try[*]} tests" >>$tmp.summary
 		fi
-		echo "" >>$tmp.summary
 		if $do_report; then
 			_make_section_report "$section" "${#try[*]}" \
 					     "${#bad[*]}" "${#notrun[*]}" \
 					     "$((sect_stop - sect_start))"
+			local out_fn="$REPORT_DIR/result.xml"
+			echo "Xunit report: $out_fn" >> $tmp.summary
+			_global_log "Xunit report: $out_fn"
 		fi
+		echo "" >>$tmp.summary
 
 		# Generate code coverage report
 		if [ -n "$REPORT_GCOV" ]; then
@@ -656,18 +686,19 @@ _stash_test_status() {
 
 		if ((loop_on_fail && ${#loop_status[*]} > loop_on_fail)) || \
 		   ((loop_unconditional && ${#loop_status[*]} > loop_unconditional)); then
-			printf "%s aggregate results across %d runs: " \
-				"$test_seq" "${#loop_status[*]}"
-			awk "BEGIN {
-				n=split(\"${loop_status[*]}\", arr);"'
-				for (i = 1; i <= n; i++)
-					stats[arr[i]]++;
-				for (x in stats)
-					printf("%s=%d (%.1f%%)",
-					       (i-- > n ? x : ", " x),
-					       stats[x], 100 * stats[x] / n);
-				}'
-			echo
+			local test_stats=$(printf "%s aggregate results across %d runs: " \
+				"$test_seq" "${#loop_status[*]}")
+			test_stats+=$(awk "BEGIN {
+					n=split(\"${loop_status[*]}\", arr);"'
+					for (i = 1; i <= n; i++)
+						stats[arr[i]]++;
+					for (x in stats)
+						printf("%s=%d (%.1f%%)",
+							   (i-- > n ? x : ", " x),
+							   stats[x], 100 * stats[x] / n);
+					}')
+			echo "$test_stats"
+			loop_test_stats_per_section+=("$test_stats")
 			loop_status=()
 			is_bad_test=false
 		fi
@@ -840,14 +871,7 @@ function run_section()
 	rm -f $check.full
 
 	[ -f $check.time ] || touch $check.time
-
-	# print out our test configuration
-	echo "FSTYP         -- `_full_fstyp_details`"
-	echo "PLATFORM      -- `_full_platform_details`"
-	if [ ! -z "$SCRATCH_DEV" ]; then
-	  echo "MKFS_OPTIONS  -- `_scratch_mkfs_options`"
-	  echo "MOUNT_OPTIONS -- `_scratch_mount_options`"
-	fi
+	_display_test_configuration
 	echo
 	test -n "$REPORT_GCOV" && _gcov_reset
 	needwrap=true
@@ -885,6 +909,7 @@ function run_section()
 
 	is_bad_test=false
 	loop_status=()	# track loop rerun state
+	loop_test_stats_per_section=() # store loop test statistics per section
 	local tc_status ix
 	local -a _list=( $list )
 	for ((ix = 0; ix < ${#_list[*]}; !${#loop_status[*]} && ix++)); do
