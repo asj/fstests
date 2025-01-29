@@ -1,0 +1,18 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Oracle.  All Rights Reserved.
+#
+# FS QA Test 329
+#
+# Verify sysfs knob input syntax for read_policy round-robin
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+. ./common/filter
+
+_require_fs_sysfs_attr_policy $TEST_DEV read_policy round-robin
+verify_sysfs_syntax $TEST_DEV read_policy round-robin 4k
+
+status=0
+exit
