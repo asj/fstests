@@ -21,7 +21,10 @@ _require_xfs_io_command falloc -k
 _require_xfs_io_command fpunch
 
 _scratch_mkfs >>$seqres.full 2>&1
-_scratch_mount
+
+# RWF_NOWAIT works only with direct I/O and requires an inode with nodatasum
+# to avoid checksum mismatches. Otherwise, it falls back to buffered I/O.
+_scratch_mount -o nodatasum
 
 # Test a write against COW file/extent - should fail with -EAGAIN. Disable the
 # NOCOW attribute of the file just in case MOUNT_OPTIONS has "-o nodatacow".
