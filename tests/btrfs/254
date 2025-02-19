@@ -21,6 +21,7 @@ _cleanup()
 {
 	cd /
 	rm -f $tmp.*
+	$UMOUNT_PROG $seq_mnt > /dev/null 2>&1
 	rm -rf $seq_mnt > /dev/null 2>&1
 	cleanup_dmdev
 }
