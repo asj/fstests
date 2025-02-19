@@ -13,6 +13,7 @@ _begin_fstest perms auto quick
 _cleanup()
 {
     cd /
+    test -n "$testdir" && rm -rf "$testdir"
 }
 
 # Import common functions.
@@ -23,7 +24,13 @@ _require_chown
 
 QA_FS_PERMS=$here/src/fs_perms
 
-cd $TEST_DIR
+testdir="$TEST_DIR/generic-126.$$"
+
+mkdir $testdir
+chown 0:0 $testdir
+chmod 0755 $testdir
+cd $testdir
+
 cp $here/src/testx ./testx.file
 
 # file_perm owner_uid owner_gid tester_uid tester_gid perm_to_test expected_result pass=1
@@ -46,7 +53,8 @@ $QA_FS_PERMS 200 99 99 200 99 w 1
 $QA_FS_PERMS 040 99 99 99 500 r 1
 $QA_FS_PERMS 400 99 99 200 99 r 1
 
-rm -f ./testx.file
+cd /
+rm -rf $testdir
 
 status=0
 exit
