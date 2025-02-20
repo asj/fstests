@@ -1,0 +1,4 @@
+# This config tests btrfs default configs in the running btrfs.ko and btrfs-progs.
+
+MKFS_OPTIONS=""
+MOUNT_OPTIONS=""
