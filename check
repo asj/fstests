@@ -487,6 +487,25 @@ _display_test_configuration()
 	fi
 }
 
+_print_list()
+{
+	local -n list=$1
+	local item
+	for item in "${list[@]}"; do
+		echo "$item"
+	done
+}
+
+_display_test_configuration()
+{
+	echo "FSTYP         -- `_full_fstyp_details`"
+	echo "PLATFORM      -- `_full_platform_details`"
+	if [ ! -z "$SCRATCH_DEV" ]; then
+		echo "MKFS_OPTIONS  -- `_scratch_mkfs_options`"
+		echo "MOUNT_OPTIONS -- `_scratch_mount_options`"
+	fi
+}
+
 _wrapup()
 {
 	seq="check"
