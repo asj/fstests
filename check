@@ -631,7 +631,7 @@ _wrapup()
 	sum_bad=`expr $sum_bad + ${#bad[*]}`
 	_wipe_counters
 	rm -f /tmp/*.rawout /tmp/*.out /tmp/*.err /tmp/*.time
-	if ! $OPTIONS_HAVE_SECTIONS; then
+	if ! options_have_sections_or_fs_configs; then
 		rm -f $tmp.*
 	fi
 }
