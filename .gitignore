@@ -44,6 +44,8 @@ tags
 
 # custom config files
 /configs/*.config
+# Do not ignore the btrfs devel config for testing
+!/configs/btrfs-devel.config
 
 # ltp/ binaries
 /ltp/aio-stress
