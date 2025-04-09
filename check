@@ -840,7 +840,6 @@ function run_section()
 	  fi
 	fi
 
-	seqres="$check"
 	_check_test_fs
 
 	loop_status=()	# track rerun-on-failure state
