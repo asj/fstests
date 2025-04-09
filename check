@@ -794,6 +794,7 @@ function run_section()
 
 	seq="check.$$"
 	check="$RESULT_BASE/check"
+	seqres="$check"
 
 	# don't leave old full output behind on a clean run
 	rm -f $check.full
