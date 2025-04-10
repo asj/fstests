@@ -27,9 +27,6 @@
 . ./common/preamble
 _begin_fstest auto
 
-seq=`basename $0`
-seqres="${RESULT_DIR}/${seq}"
-
 # Parse a size string which is in the format "XX.XXMib".
 #
 # Parameters:
