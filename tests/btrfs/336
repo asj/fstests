@@ -1,0 +1,183 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Oracle.  All Rights Reserved.
+#
+# FS QA Test 336
+#
+# Verify the device role is working.
+
+. ./common/preamble
+_begin_fstest auto quick volume
+
+. ./common/filter.btrfs
+
+_require_btrfs_command inspect-internal dump-tree
+
+declare -a devs="( $SCRATCH_DEV_POOL )"
+declare -a TEST_VECTORS=(
+# $m_opt:$d_opt:$m_nr:$d_nr:$monly_nr:$donly_nr:$none_nr
+
+# Standard configs.
+#"dup:single:1:0:0:0:1"
+"raid1:single:2:0:0:0:3"
+"single:single:0:0:0:0:1"
+"raid1:single:0:0:0:0:5"
+#"single:single:1:1:0:0:0"
+#"raid1:raid1:2:2:0:0:0"
+#"raid1:single:2:1:0:0:0"
+#"raid10:raid10:4:4:0:0:0"
+#"raid1:raid1:1:1:0:0:0"
+
+# Unusual config but must pass.
+#"raid1:raid1:1:1:0:0:0"
+
+# Must fail as of now.
+#"single:single:0:0:1:1:0"
+)
+
+max_ndevs=0
+verify_require_scratch_pool()
+{
+	IFS=':' read -ra args <<< $1
+
+	local ndevs=$((args[2] + args[3] + args[4] + args[5] + args[6]))
+
+	if (( max_ndevs < ndevs )); then
+		max_ndevs=$ndevs
+	fi
+}
+for testcase in "${TEST_VECTORS[@]}"; do
+	verify_require_scratch_pool $testcase
+done
+_require_scratch_dev_pool $max_ndevs
+
+
+filter()
+{
+	awk '
+	{
+		for (i = 1; i <= NF; i++) {
+			is_excluded_value = 0
+			# Check the preceding field only if we are not on the first field
+			if (i > 1) {
+				if ($(i-1) == "num_stripes" || $(i-1) == "sub_stripes" || \
+				    $(i-1) == "stripe" || $(i-1) == "devid") {
+					is_excluded_value = 1
+				}
+			}
+
+			# Check if the current field consists only of digits
+			is_numeric = ($i ~ /^[0-9]+$/)
+
+			# If it is numeric and its preceding keyword is not in the exclusion list, sanitize it
+			if (is_numeric && !is_excluded_value) {
+				$i = "X"  # Replace the number with "X"
+			}
+		}
+		print $0
+	}' "$@"
+}
+
+extract()
+{
+	awk '
+	/^[ \t]*item [0-9]+ key/ {
+		if (keep && block) { print block }
+		block = $0
+		keep = 0
+		next
+	}
+	!/^[ \t]*item [0-9]+ key/ && block {
+		block = block "\n" $0
+		if ($0 ~ /type (METADATA|DATA)/) {
+			keep = 1
+		}
+	}
+	END {
+		if (keep && block) { print block }
+	}' "$@"
+}
+
+verify()
+{
+	IFS=':' read -ra args <<< $1
+	local m_opt=${args[0]}
+	local d_opt=${args[1]}
+	local m_nr=${args[2]}
+	local d_nr=${args[3]}
+	local monly_nr=${args[4]}
+	local donly_nr=${args[5]}
+	local none_nr=${args[6]}
+
+	local assigned_devs_string=""
+	local dev_idx=0 # Keep track of the current device index from the 'devs' array
+	local i # Loop counter
+
+	# --- Loop to assign devices based on roles ---
+
+	# Assign devices for metadata role (m)
+	for ((i=0; i<m_nr; i++)); do
+		# Use ${devs[$dev_idx]} to get the actual device path
+		assigned_devs_string+=" ${devs[$dev_idx]}:m"
+		((dev_idx++))
+	done
+
+	# Assign devices for data role (d)
+	for ((i=0; i<d_nr; i++)); do
+		# Use ${devs[$dev_idx]}
+		assigned_devs_string+=" ${devs[$dev_idx]}:d"
+		((dev_idx++))
+	done
+
+	# Assign devices for metadata only role (monly)
+	for ((i=0; i<monly_nr; i++)); do
+		# Use ${devs[$dev_idx]}
+		assigned_devs_string+=" ${devs[$dev_idx]}:monly"
+		((dev_idx++))
+	done
+
+	# Assign devices for data only role (donly)
+	for ((i=0; i<donly_nr; i++)); do
+		# Use ${devs[$dev_idx]}
+		assigned_devs_string+=" ${devs[$dev_idx]}:donly"
+		((dev_idx++))
+	done
+
+	# Assign devices with no specific role (none)
+	for ((i=0; i<none_nr; i++)); do
+		# Use ${devs[$dev_idx]}
+		assigned_devs_string+=" ${devs[$dev_idx]}"
+		((dev_idx++))
+	done
+
+	# Remove potential leading space
+	assigned_devs_string="${assigned_devs_string# }"
+
+	# --- End of assignment loop ---
+
+	# Print the results for verification/debugging
+	echo "Test Vector: $1" >> $seqres.full
+	echo "Generated mkfs opt: $m_opt $d_opt \"$assigned_devs_string\"" | \
+					_filter_scratch_pool
+
+	# Actual test starts here
+	_mkfs_dev "-m $m_opt -d $d_opt $assigned_devs_string" || \
+							_fail "mkfs failed"
+	sync
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 ${devs[0]} | \
+		grep -A2 DEV_ITEMS | grep -E 'devid|type' | \
+		perl -pe 's/(?<!devid |type )\b\d+\b/X/g'
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 ${devs[0]} | \
+		extract | grep -v 'io_align' | grep -E 'DATA|stripe' | filter
+
+	echo ===
+
+	return 0
+}
+
+for testcase in "${TEST_VECTORS[@]}"; do
+	verify $testcase
+done
+
+status=0
+exit
