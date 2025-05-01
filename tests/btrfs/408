@@ -1,0 +1,259 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Oracle.  All Rights Reserved.
+#
+# FS QA Test 408
+#
+# Verify the device role is working.
+
+. ./common/preamble
+_begin_fstest auto quick volume
+
+. ./common/sysfs
+. ./common/filter.btrfs
+
+_require_test
+_require_loop
+_require_btrfs_command inspect-internal dump-tree
+_require_btrfs_command inspect-internal list-chunks
+_require_btrfs_feature_device_roles
+_require_fs_sysfs_attr_policy $TEST_DEV device_allocation role-then-space
+
+_cleanup()
+{
+	losetup -d ${DEV[@]} > /dev/null 2>&1
+	rm -f ${IMG[@]} > /dev/null 2>&1
+}
+
+declare -a TEST_VECTORS=(
+# $m_profile:$d_profile:$monly_nr:$m_nr:$none_nr:$d_nr:$donly_nr
+"single:single:0:4:4:4:0"
+"dup:single:0:1:1:1:0"
+"raid1:single:0:2:1:2:0"
+"raid10:raid10:0:4:1:4:0"
+# Unusual config but must pass.
+"raid1:raid1:0:1:0:1:0"
+# Must fail as of now.
+"single:single:1:0:0:0:1"
+)
+
+# Check if at least 4Gb space is available.
+_require_fs_space $TEST_DIR $((4*1000*1000))
+
+# Make sure TEST_VECTORS would need not more than MAX_NDEVS scratch devices of
+# different size.
+MAX_NDEVS=12
+for testcase in "${TEST_VECTORS[@]}"; do
+	IFS=':' read -ra args <<< $testcase
+	ndevs=$((args[2] + args[3] + args[4] + args[5] + args[6]))
+
+	if (( MAX_NDEVS < ndevs )); then
+		_fail "'$testcase' needs more than max '$MAX_NDEVS' devs"
+	fi
+done
+
+declare -a IMG="(  )"
+declare -a DEV="(  )"
+
+# As the disk allocaiton depend on the free space, create scratch devices with
+# different sizes
+# Make sure there are MAX_NDEVS elements here
+sizes=(256 768 512 1280 1024 1536 2048 1792 2304 3072 2816 3328)
+for ((i=0; i<MAX_NDEVS; i++)); do
+	size=${sizes[i]}
+	path=$TEST_DIR/$$_${i}_${size}.img
+	truncate -s ${size}M ${path} || _fail "truncate ${path}"
+
+	DEV[$i]=$(_create_loop_device ${path})
+	IMG[$i]=$path
+	echo $(stat --format=%n,%s,%i ${IMG[$i]}) ${DEV[$i]} >> $seqres.full
+done
+
+filter()
+{
+	awk '
+	{
+		for (i = 1; i <= NF; i++) {
+			is_excluded_value = 0
+			# Check the preceding field only if we are not on the
+			# first field
+			if (i > 1) {
+				if ($(i-1) == "num_stripes" || \
+				    $(i-1) == "sub_stripes" || \
+				    $(i-1) == "stripe" || $(i-1) == "devid") {
+					is_excluded_value = 1
+				}
+			}
+
+			# Check if the current field consists only of digits
+			is_numeric = ($i ~ /^[0-9]+$/)
+
+			# If it is numeric and its preceding keyword is not in
+			# the exclusion list, sanitize it
+			if (is_numeric && !is_excluded_value) {
+				$i = "X"  # Replace the number with "X"
+			}
+		}
+		print $0
+	}' "$@"
+}
+
+extract()
+{
+	awk '
+	/^[ \t]*item [0-9]+ key/ {
+		if (keep && block) { print block }
+		block = $0
+		keep = 0
+		next
+	}
+	!/^[ \t]*item [0-9]+ key/ && block {
+		block = block "\n" $0
+		if ($0 ~ /type (METADATA|DATA)/) {
+			keep = 1
+		}
+	}
+	END {
+		if (keep && block) { print block }
+	}' "$@"
+}
+
+dump_tree()
+{
+	local dev=$1
+
+	# make sure the ondisk has the mkfs
+	sync
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 ${dev} | \
+		grep -A2 DEV_ITEMS | grep -E 'devid|type' | \
+		perl -pe 's/(?<!devid |type )\b\d+\b/X/g'
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 ${dev} | \
+		extract | grep -v 'io_align' | grep -E 'DATA|stripe' | filter
+}
+
+dump_chunks()
+{
+	# Make sure relocation chunks are synced before dumping them.
+	$XFS_IO_PROG -c sync $SCRATCH_MNT
+
+$BTRFS_UTIL_PROG inspect-internal list-chunks --raw --sort lstart $SCRATCH_MNT >> \
+								${seqres}.full
+
+	# We don't care how many chunks there are, but we do ensure that all of
+	# are on the correct device.
+$BTRFS_UTIL_PROG inspect-internal list-chunks --raw --sort lstart $SCRATCH_MNT | \
+		$AWK_PROG '{print $1" "$3}' | grep -E 'Data' | sort -u
+
+$BTRFS_UTIL_PROG inspect-internal list-chunks --raw --sort lstart $SCRATCH_MNT | \
+		$AWK_PROG '{print $1" "$3}' | grep -E 'Metadata' | sort -u
+}
+
+verify()
+{
+	IFS=':' read -ra args <<< $1
+	local m_profile=${args[0]}
+	local d_profile=${args[1]}
+	local monly_nr=${args[2]}
+	local m_nr=${args[3]}
+	local none_nr=${args[4]}
+	local d_nr=${args[5]}
+	local donly_nr=${args[6]}
+
+	local assigned_devs_string=""
+	local ref_dev
+	local dev_idx=0 # Keeps track of indexing 'DEV' array
+	local i # Loop counter
+
+	# --- Loop to assign devices based on roles ---
+
+	# Assign devices for metadata only role (monly)
+	for ((i=0; i<monly_nr; i++)); do
+		assigned_devs_string+=" ${DEV[$dev_idx]}:monly"
+		((dev_idx++))
+	done
+
+	# Assign devices for metadata role (m)
+	for ((i=0; i<m_nr; i++)); do
+		assigned_devs_string+=" ${DEV[$dev_idx]}:m"
+		((dev_idx++))
+	done
+
+	# Assign devices for data role (d)
+	for ((i=0; i<d_nr; i++)); do
+		assigned_devs_string+=" ${DEV[$dev_idx]}:d"
+		((dev_idx++))
+	done
+
+	# Assign devices for data only role (donly)
+	for ((i=0; i<donly_nr; i++)); do
+		assigned_devs_string+=" ${DEV[$dev_idx]}:donly"
+		((dev_idx++))
+	done
+
+	# Assign devices with no specific role (none)
+	# Make sure role-none gets devs with larger size.
+	dev_idx=$MAX_NDEVS
+	for ((i=0; i<none_nr; i++)); do
+		assigned_devs_string+=" ${DEV[$dev_idx]}"
+		((dev_idx--))
+	done
+
+	# Remove potential leading space
+	assigned_devs_string="${assigned_devs_string# }"
+
+	# Print the results for verification/debugging
+	echo "mkfs opt: $m_profile $d_profile \"$assigned_devs_string\"" >> \
+								$seqres.full
+	ref_dev=$(echo $assigned_devs_string | sed 's/:.*//g')
+	echo $ref_dev >> ${seqres}.full
+
+	# --- End of assignment loop ---
+
+
+	echo -e "\nTest Vector: $1"
+
+	# Roles like metadata_only or data_only aren’t supported yet. Just make
+	# sure they fail cleanly.
+	echo $assigned_devs_string | grep -q only
+	if [[ $? == 0 ]]; then
+		_try_mkfs_dev "-q -m $m_profile -d $d_profile $assigned_devs_string"
+		return
+	else
+		_mkfs_dev "-q -m $m_profile -d $d_profile $assigned_devs_string"
+	fi
+
+	# Make sure the golden output verifies that the roles are updated in the
+	# on-disk structure.
+	dump_tree $ref_dev
+
+	# Keep data seperate use max_inline
+	_mount "-o max_inline=0" $ref_dev $SCRATCH_MNT
+	$XFS_IO_PROG -f -c "pwrite -i /dev/zero 0 1M" $SCRATCH_MNT/foo > \
+								/dev/null 2>&1
+
+	_set_fs_sysfs_attr ${ref_dev} device_allocation space
+	_get_fs_sysfs_attr ${ref_dev} device_allocation
+	_run_btrfs_balance_start $SCRATCH_MNT >> $seqres.full
+
+	# When testing with different options like ^free-space-tree,
+	# block-group-tree, etc the number of allocated chunks can vary and they
+	# might not be on the same device. Therefore, when we are not using
+	# role-then-space, do not dump chunk location so that the golden output
+	# remains compatible.
+	#dump_chunks
+
+	_set_fs_sysfs_attr ${ref_dev} device_allocation role-then-space
+	_get_fs_sysfs_attr ${ref_dev} device_allocation
+	_run_btrfs_balance_start $SCRATCH_MNT >> $seqres.full
+
+	dump_chunks
+
+	_scratch_unmount
+}
+
+for testcase in "${TEST_VECTORS[@]}"; do
+	verify $testcase
+done
+
+status=0
+exit
