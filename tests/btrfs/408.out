@@ -1,0 +1,153 @@
+QA output created by 408
+
+Test Vector: single:single:0:4:4:4:0
+		devid 1 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 40
+		devid 2 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 40
+		devid 3 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 40
+		devid 4 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 40
+		devid 5 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 0
+		devid 6 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 0
+		devid 7 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 0
+		devid 8 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 100
+		devid 9 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 100
+		devid 10 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 100
+		devid 11 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 100
+length X owner X stripe_len X type METADATA|single
+		num_stripes 1 sub_stripes 1
+stripe 0 devid 1 offset X
+length X owner X stripe_len X type DATA|single
+		num_stripes 1 sub_stripes 1
+stripe 0 devid 1 offset X
+[space] role-then-space
+space [role-then-space]
+10 Data/single
+4 Metadata/single
+
+Test Vector: dup:single:0:1:1:1:0
+		devid 1 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 40
+		devid 2 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 100
+length X owner X stripe_len X type DATA|single
+		num_stripes 1 sub_stripes 1
+stripe 0 devid 1 offset X
+length X owner X stripe_len X type METADATA|DUP
+		num_stripes 2 sub_stripes 1
+stripe 0 devid 1 offset X
+stripe 1 devid 1 offset X
+[space] role-then-space
+space [role-then-space]
+2 Data/single
+1 Metadata/DUP
+
+Test Vector: raid1:single:0:2:1:2:0
+		devid 1 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 40
+		devid 2 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 40
+		devid 3 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 100
+		devid 4 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 100
+length X owner X stripe_len X type DATA|single
+		num_stripes 1 sub_stripes 1
+stripe 0 devid 1 offset X
+length X owner X stripe_len X type METADATA|RAID1
+		num_stripes 2 sub_stripes 1
+stripe 0 devid 4 offset X
+stripe 1 devid 2 offset X
+[space] role-then-space
+space [role-then-space]
+4 Data/single
+1 Metadata/RAID1
+2 Metadata/RAID1
+
+Test Vector: raid10:raid10:0:4:1:4:0
+		devid 1 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 40
+		devid 2 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 40
+		devid 3 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 40
+		devid 4 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 40
+		devid 5 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 100
+		devid 6 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 100
+		devid 7 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 100
+		devid 8 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 100
+length X owner X stripe_len X type METADATA|RAID10
+		num_stripes 8 sub_stripes 2
+stripe 0 devid 5 offset X
+stripe 1 devid 6 offset X
+stripe 2 devid 7 offset X
+stripe 3 devid 8 offset X
+stripe 4 devid 1 offset X
+stripe 5 devid 2 offset X
+stripe 6 devid 3 offset X
+stripe 7 devid 4 offset X
+length X owner X stripe_len X type DATA|RAID10
+		num_stripes 8 sub_stripes 2
+stripe 0 devid 1 offset X
+stripe 1 devid 2 offset X
+stripe 2 devid 3 offset X
+stripe 3 devid 4 offset X
+stripe 4 devid 5 offset X
+stripe 5 devid 6 offset X
+stripe 6 devid 7 offset X
+stripe 7 devid 8 offset X
+[space] role-then-space
+space [role-then-space]
+1 Data/RAID10
+2 Data/RAID10
+3 Data/RAID10
+4 Data/RAID10
+5 Data/RAID10
+6 Data/RAID10
+7 Data/RAID10
+8 Data/RAID10
+1 Metadata/RAID10
+2 Metadata/RAID10
+3 Metadata/RAID10
+4 Metadata/RAID10
+5 Metadata/RAID10
+6 Metadata/RAID10
+7 Metadata/RAID10
+8 Metadata/RAID10
+
+Test Vector: raid1:raid1:0:1:0:1:0
+		devid 1 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 40
+		devid 2 total_bytes X bytes_used X
+		io_align X io_width X sector_size X type 100
+length X owner X stripe_len X type METADATA|RAID1
+		num_stripes 2 sub_stripes 1
+stripe 0 devid 2 offset X
+stripe 1 devid 1 offset X
+length X owner X stripe_len X type DATA|RAID1
+		num_stripes 2 sub_stripes 1
+stripe 0 devid 1 offset X
+stripe 1 devid 2 offset X
+[space] role-then-space
+space [role-then-space]
+1 Data/RAID1
+2 Data/RAID1
+1 Metadata/RAID1
+2 Metadata/RAID1
+
+Test Vector: single:single:1:0:0:0:1
+ERROR: Metadata_only and or Data_only is not yet supported
