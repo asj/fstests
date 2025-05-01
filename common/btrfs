@@ -1048,3 +1048,15 @@ _require_btrfs_iouring_encoded_read()
 		_notrun "btrfs io_uring encoded read failed with -EOPNOTSUPP"
 	fi
 }
+
+_require_btrfs_feature_device_roles()
+{
+	_require_btrfs_fs_sysfs
+	_require_btrfs_fs_feature device_allocation
+
+	$MKFS_BTRFS_PROG --help 2>&1 | \
+				grep -q "Device-specific roles or profiles"
+	if (($? != 0)); then
+		_notrun "Requires btrfs-progs device roles support"
+	fi
+}
