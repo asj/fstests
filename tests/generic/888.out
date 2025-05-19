@@ -1,0 +1,6 @@
+QA output created by 888
+mount: MAPPER_PATH mounted on SCRATCH_MNT.
+MAPPER_PATH
+MAPPER_PATH
+MAPPER_PATH SCRATCH_MNT
+SCRATCH_MNT             : already mounted
