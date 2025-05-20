@@ -1,0 +1,19 @@
+QA output created by 350
+--- DM_PATH SCRATCH_DEV ----
+mount: MAPPER_PATH mounted on /mnt/scratch.
+MAPPER_PATH
+MAPPER_PATH
+MAPPER_PATH /mnt/scratch
+SCRATCH_MNT             : already mounted
+--- SCRATCH_DEV SCRATCH_DEV ----
+mount: SCRATCH_DEV mounted on /mnt/scratch.
+SCRATCH_DEV
+SCRATCH_DEV
+SCRATCH_DEV /mnt/scratch
+SCRATCH_MNT             : already mounted
+--- SCRATCH_DEV SCRATCH_DEV ----
+mount: SCRATCH_DEV mounted on /mnt/scratch.
+SCRATCH_DEV
+SCRATCH_DEV
+SCRATCH_DEV /mnt/scratch
+SCRATCH_MNT             : already mounted
