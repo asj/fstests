@@ -1,0 +1,110 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Oracle.  All Rights Reserved.
+#
+# FS QA Test 350
+#
+# Test that show_devname() returns a device path that matches findmnt,
+# ensuring that mount -a works correctly for multi-device Btrfs filesystems.
+
+. ./common/preamble
+_begin_fstest auto volume
+
+node="fstests_${seq}"
+
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+
+	clean_per_iteration
+
+	udevadm control --start-exec-queue
+	_dmsetup_remove $node
+}
+
+. ./common/systemd
+. ./common/filter
+
+_require_scratch_dev_pool 2
+_require_btrfs_forget_or_module_loadable
+_require_block_device $SCRATCH_DEV
+_require_dm_target linear
+
+# The btrfs-progs commit prevents the bug
+_fixed_by_git_commit btrfs-progs XXXXXXXXXXXX \
+	"btrfs-progs: fix inconsistency in device path handling"
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"btrfs: pass device path update from mount thread"
+
+_scratch_dev_pool_get 3
+scratch_devs=($SCRATCH_DEV_POOL)
+#size doesn't matter just create it to the device size
+sectors=$(blockdev --getsz ${scratch_devs[0]})
+table="0 $sectors linear  ${scratch_devs[0]} 0"
+_dmsetup_create $node --table "$table" || _fail "setup dm device failed"
+scratch_mapper_dev=/dev/mapper/$node
+scratch_dm_dev=$(realpath ${scratch_mapper_dev})
+
+clean_per_iteration()
+{
+	_unmount $SCRATCH_MNT > /dev/null 2>&1
+	sed -i "\|[[:space:]]$SCRATCH_MNT[[:space:]]|d" /etc/fstab
+	_systemd_installed && _systemd_reload
+}
+
+filter_mapper()
+{
+	sed -e "s,\B$scratch_mapper_dev,MAPPER_PATH,g" |\
+		sed -e "s,/dev/dm-[^ ]*,DM_PATH,g" |\
+		_filter_scratch_pool
+}
+
+test_dev_path()
+{
+	clean_per_iteration
+	_btrfs_forget_or_module_reload
+
+	echo --- ${devs[@]} ---- | filter_mapper
+	_mkfs_dev "${devs[0]} ${devs[1]}"
+
+	# mount resolves dm path to its mapper path
+	_mount --verbose ${devs[0]} -o device=${devs[1]} $SCRATCH_MNT | \
+								filter_mapper
+
+	fsid=$(findmnt -n -o UUID ${devs[0]})
+	blkid --uuid ${fsid} | filter_mapper
+	findmnt --source UUID=${fsid} --noheadings --output SOURCE | \
+								filter_mapper
+	cat /proc/self/mounts | grep ${SCRATCH_MNT} | \
+				$AWK_PROG '{print $1" "$2}' | filter_mapper
+
+	echo "UUID=${fsid} ${SCRATCH_MNT} $FSTYP defaults 0 0" >> /etc/fstab
+	_systemd_installed && _systemd_reload
+
+	# The error output from `mount -a --verbose` varies.
+        # In libmount 2.37.4, the `mount -a` command will fail with -EBUSY.
+        # In libmount 2.40.2, it will report "Successfully mounted" instead
+        # of "already mounted."
+	_mount --verbose -a | grep $SCRATCH_MNT | _filter_scratch
+}
+
+# Block external triggers such as (64-btrfs-dm.rules) that alter the device path
+# inside the kernel, they are unreliable.
+udevadm control --stop-exec-queue
+secnarios=(
+	"$scratch_dm_dev ${scratch_devs[1]}"
+	"${scratch_devs[2]} ${scratch_devs[1]}"
+	"${scratch_devs[1]} ${scratch_devs[2]}"
+)
+
+devs=()
+for devs_str in "${secnarios[@]}"; do
+	devs=($devs_str)
+	test_dev_path
+done
+udevadm control --start-exec-queue
+
+_scratch_dev_pool_put
+status=0
+exit
