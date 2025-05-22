@@ -27,12 +27,8 @@ _cleanup()
 	rm -f $tmp.*
 }
 
-# get standard environment, filters and checks
 . ./common/filter
 . ./common/quota
-
-# remove previous $seqres.full before test
-rm -f $seqres.full
 
 echo "Silence is golden."
 
