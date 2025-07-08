@@ -26,7 +26,7 @@ _crashtest()
 	img=$SCRATCH_MNT/$seq.img
 	mnt=$SCRATCH_MNT/$seq.mnt
 	file=$mnt/file
-	size=$(_small_fs_size_mb 25)M
+	size=$(_small_fs_size_mb 300)M
 
 	# Create an fs on a small, initialized image. The pattern is written to
 	# the image to detect stale data exposure.
