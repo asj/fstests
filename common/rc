@@ -1534,6 +1534,72 @@ _scratch_resvblks()
 	esac
 }
 
+# Create a small loop image, run an optional tuning function ($2) on it,
+# clone it, and attach both to loop devices, returned in ($1).
+# Args:
+#   $1: Nameref to return the array of allocated loop devices [base, clone].
+#   $2: Optional callback function to tune the base filesystem before cloning.
+_create_cloned_loop_devs()
+{
+	local -n _ret=$1
+	local pre_clone_tune_func="$2"
+	local img_file="$TEST_DIR/${seq}/orig.img"
+	local img_file_clone="$TEST_DIR/${seq}/clone.img"
+	local size=$(_small_fs_size_mb 128) # Smallest possible
+	local temp_dev
+	local loop_devs=()
+
+	# All current callers mount the original and the clone simultaneously.
+	_require_clone_mount
+
+	# Since we copy the block device image, we keep its size small.
+	_require_fs_space $TEST_DIR $((size * 1024 * 2))
+
+	_create_file_sized $((size * 1024 * 1024)) $img_file ||
+				_fail "Failed: Create $img_file $size"
+
+	temp_dev=("$(_create_loop_device_like_bdev $img_file ${TEST_DEV})")
+	_mkfs_dev "${temp_dev}"
+
+	# Only execute if the function argument is not empty
+	if [ -n "$pre_clone_tune_func" ]; then
+		$pre_clone_tune_func "${temp_dev}"
+	fi
+
+	# We are about to copy the loop device's backing file
+	# Flush loop device's buffer cache
+	blockdev --flushbufs "${temp_dev}"
+	# Sync system's dirty pages including backing file's
+	sync
+	_destroy_loop_device "${temp_dev}"
+
+	cp $img_file $img_file_clone || _fail "Failed to copy cloned image"
+
+	loop_devs=("$(_create_loop_device_like_bdev $img_file ${TEST_DEV})")
+	loop_devs+=("$(_create_loop_device_like_bdev $img_file_clone ${TEST_DEV})")
+
+	# Help debug
+	losetup --list "${loop_devs[0]}" >> $seqres.full
+	losetup --list "${loop_devs[1]}" >> $seqres.full
+
+	_ret=("${loop_devs[@]}")
+}
+
+# Teardown loop devices and delete their underlying backing image files.
+# Accepts a list of loop device paths (e.g., /dev/loop0 /dev/loop1).
+_destroy_cloned_loop_devs()
+{
+	for d in "$@"; do
+		# Retrieve the path of the backing file
+		local f=$(losetup --noheadings --output BACK-FILE $d)
+
+		# Detach the loop device from the backing file
+		_destroy_loop_device "$d"
+
+		# Clean up the backing disk image file
+		[ -n "$f" ] && rm -f "$f"
+	done
+}
 
 # Repair scratch filesystem.  Returns 0 if the FS is good to go (either no
 # errors found or errors were fixed) and nonzero otherwise; also spits out
