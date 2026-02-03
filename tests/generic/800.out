@@ -1,0 +1,7 @@
+QA output created by 800
+Setup inotify watchers on both mnt1 and mnt2
+Trigger file creation on mnt1
+Trigger file creation on mnt2
+Verify inotify isolation
+SUCCESS: mnt1 events isolated.
+SUCCESS: mnt2 events isolated.
