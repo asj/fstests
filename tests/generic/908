@@ -1,0 +1,88 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Anand Jain <asj@kernel.org>.  All Rights Reserved.
+#
+# FS QA Test No. 908
+# Check that the cloned filesystem provides an f_fsid that is persistent
+# across mount cycles if the block device maj:min remains unchanged.
+#
+# Currently, there are three different approaches for deriving statfs f_fsid:
+#   - XFS and F2FS: f_fsid is a hash of the uuid and dev_t.
+#   - Ext4: f_fsid is a hash of the uuid only.
+#   - Btrfs: f_fsid is a hash of the uuid for the original filesystem,
+#            and a hash of the uuid and dev_t for cloned filesystems.
+#            Mount order determines which is identified as the original
+#            versus the cloned filesystem.
+#
+# For Btrfs and Ext4, use external tools to update the uuid
+# and ensure a unique/consistent f_fsid for cloned filesystems.
+
+. ./common/preamble
+
+_begin_fstest auto quick mount tempfsid
+
+_require_test
+_require_loop
+
+_fixed_by_fs_commit btrfs df84f6c77377 \
+        "btrfs: use on-disk uuid for s_uuid in temp_fsid mounts"
+_fixed_by_fs_commit btrfs c2a74ed0494c \
+        "btrfs: derive f_fsid from on-disk fsuuid and dev_t"
+_fixed_by_fs_commit btrfs 72de4807ba84 \
+        "btrfs: derive f_fsid with dev_t only when temp_fsid is active"
+
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+	umount $mnt1 $mnt2 2>/dev/null
+	_destroy_cloned_loop_devs "${devs[@]}" 2> /dev/null
+}
+
+rm -rf $TEST_DIR/$seq 2>/dev/null
+mkdir -p $TEST_DIR/$seq
+# Setup base loop device and its clone
+devs=()
+_create_cloned_loop_devs devs
+mnt1=$TEST_DIR/$seq/mnt1
+mnt2=$TEST_DIR/$seq/mnt2
+mkdir -p $mnt1
+mkdir -p $mnt2
+
+# Mount both filesystems simultaneously using mandatory clone mount options
+_mount $(_common_dev_mount_options) $(_clone_mount_options) ${devs[0]} $mnt1 || \
+						_fail "Failed to mount dev1"
+_mount $(_common_dev_mount_options) $(_clone_mount_options) ${devs[1]} $mnt2 || \
+						_fail "Failed to mount dev2"
+
+# Capture baseline filesystem IDs for comparison
+fsid_scratch=$(stat -f -c "%i" $mnt1)
+fsid_clone=$(stat -f -c "%i" $mnt2)
+
+# Verify that the fsids remain stable after a mount cycle, even when the
+# mount order is reversed.
+_unmount $mnt1
+_unmount $mnt2
+_mount $(_common_dev_mount_options) $(_clone_mount_options) ${devs[1]} $mnt2 || \
+						_fail "Failed to mount dev2"
+_mount $(_common_dev_mount_options) $(_clone_mount_options) ${devs[0]} $mnt1 || \
+						_fail "Failed to mount dev1"
+
+# Compare post mount-cycle values against the baseline
+fsid_mnt1=$(stat -f -c "%i" $mnt2)
+fsid_mnt2=$(stat -f -c "%i" $mnt1)
+
+case "$FSTYP" in
+btrfs)
+	[[ "$fsid_mnt1" != "$fsid_scratch" ]] && \
+		_fail "fsid does not match the original filesystem"
+	;;
+xfs|f2fs|ext4)
+	[[ "$fsid_mnt1" != "$fsid_clone" ]] && \
+		_fail "Cloned filesystem f_fsid is inconsistent"
+	;;
+esac
+
+echo Silence is golden
+
+_exit 0
