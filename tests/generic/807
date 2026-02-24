@@ -1,0 +1,61 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Anand Jain <asj@kernel.org>. All Rights Reserved.
+#
+# FS QA Test generic/805
+
+. ./common/preamble
+_begin_fstest auto quick encrypt
+
+# Import common functions.
+. ./common/filter
+. ./common/encrypt
+
+_require_test
+_require_scratch_dev_pool 2
+_require_scratch_encryption
+_require_command "$KEYCTL_PROG" keyctl
+
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+	umount $mnt2 2>/dev/null
+	_scratch_dev_pool_put
+}
+
+_init_session_keyring
+
+# Create and Setup Source Device
+_scratch_dev_pool_get 2
+_scratch_mkfs_encrypted &>> $seqres.full
+_scratch_mount
+devs=($SCRATCH_DEV_POOL)
+
+keydesc=$(_generate_session_encryption_key)
+raw_key=$(_generate_raw_encryption_key)
+mkdir $SCRATCH_MNT/encdir
+_add_session_encryption_key $keydesc $raw_key
+_set_encpolicy $SCRATCH_MNT/encdir $keydesc
+
+echo Hello World > $SCRATCH_MNT/encdir/foo
+
+_unlink_session_encryption_key $keydesc
+_scratch_unmount
+dd if=$SCRATCH_DEV of=${devs[1]} bs=1M status=none
+_scratch_mount
+mnt2=$TEST_DIR/mnt2
+mkdir -p $mnt2
+mount_opts=""
+[ "$FSTYP" == "xfs" ] && mount_opts="-o nouuid"
+_mount $mount_opts ${devs[1]} $mnt2 || _fail "Failed to mount dev2"
+
+_add_session_encryption_key $keydesc $raw_key
+
+echo "*** original block device ***"
+cat $SCRATCH_MNT/encdir/foo
+echo "*** cloned block device ***"
+cat $mnt2/encdir/foo
+
+status=0
+exit
