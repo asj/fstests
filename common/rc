@@ -6384,6 +6384,13 @@ _require_max_file_range_blocks()
 	esac
 }
 
+_require_fanotify_function()
+{
+        if $FSNOTIFYWAIT_PROG 2>&1 | grep -q "Function not implemented"; then
+                _notrun "Need CONFIG_FANOTIFY and CONFIG_FANOTIFY_ACCESS_PERMISSIONS to be enabled"
+        fi
+}
+
 _require_fanotify_ioerrors()
 {
 	local x
