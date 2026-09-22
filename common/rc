@@ -6124,6 +6124,21 @@ _force_inplace_writes()
 	esac
 }
 
+_require_clone_mount()
+{
+	case "$FSTYP" in
+	xfs|ext4|f2fs)
+		# No kernel-side restriction; always supported
+		;;
+	btrfs)
+		_require_btrfs_fs_feature "temp_fsid"
+		;;
+	*)
+		_notrun "$FSTYP does not support mounting cloned devices simultaneously"
+		;;
+	esac
+}
+
 # Test that a filesystem can do writes to a file in place (without allocating
 # new extents, without Copy-On-Write semantics).
 _require_inplace_writes()
