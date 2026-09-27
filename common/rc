@@ -6354,6 +6354,29 @@ _max() {
 	echo $ret
 }
 
+# Check if the requirements for Integrity Measurement Architecture (IMA) testing are met:
+# 1. securityfs is enabled in the kernel.
+# 2. securityfs is rw-mountable with the IMA policy loadable.
+_require_security_ima()
+{
+	[ -d /sys/kernel/security ] || _notrun "kernel doesn't support securityfs"
+
+	# securityfs may not be mounted yet on the host; mount it read-only
+	# in a scratch location just to probe for IMA support.
+	local se_mnt="${TEST_MNT}/${seq}/se_mnt"
+	local has_ima=1
+
+	mkdir -p "${se_mnt}"
+	_mount -t securityfs securityfs "${se_mnt}" 2>/dev/null || _notrun "cannot mount securityfs"
+
+	[ -d "${se_mnt}/ima" ] || has_ima=0
+	[ -w "${se_mnt}/ima/policy" ] || _notrun "IMA policy not writable"
+
+	_unmount "${se_mnt}"
+
+	[ $has_ima -eq 1 ] || _notrun "kernel doesn't support IMA"
+}
+
 # Due to reasons explained in fio commit 40f1fc11d, fio version between
 # v3.33 and v3.38 have atomic= feature but it is a no-op and doesn't do
 # RWF_ATOMIC write. Hence, use this helper to ensure fio has the
