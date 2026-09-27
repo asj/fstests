@@ -6527,6 +6527,24 @@ _require_unique_f_fsid()
 	esac
 }
 
+_require_metadata_uuid()
+{
+	case $FSTYP in
+	xfs)
+		# The xfs_admin utility is required to modify the filesystem UUID.
+		# Kernel support for metadata_uuid has been present since 4.16, so
+		# it is assumed to be available.
+		_require_command "$XFS_ADMIN_PROG" "xfs_admin"
+		;;
+	btrfs)
+		_require_btrfs_fs_feature "metadata_uuid"
+		_require_command "$BTRFS_TUNE_PROG" "btrfstune"
+		;;
+	*)
+		_notrun "Require filesystem with metadata_uuid feature"
+		;;
+	esac
+}
 
 # Computes a percentage of the available space in a filesystem and
 # returns that quantity in MB. The percentage must not contain a percent
