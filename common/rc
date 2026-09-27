@@ -4815,7 +4815,6 @@ _create_loop_device_like_bdev()
 {
 	local file=$1
 	local bdev=$2
-	local dev
 	local blksize
 
 	test -b "$bdev" || \
