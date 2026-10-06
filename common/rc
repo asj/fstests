@@ -1449,6 +1449,36 @@ _scratch_mkfs_sized()
 	_try_scratch_mkfs_sized "$@" || _notrun "_scratch_mkfs_sized failed with ($*)"
 }
 
+# mkfs filesystem with a known uuid
+# Input argument : none
+_scratch_mkfs_uuid()
+{
+	case $FSTYP in
+	f2fs|ext4)
+		if echo "$MKFS_OPTIONS" | grep -E -q "-U"; then
+			_notrun "Config contains mkfs uuid option"
+		fi
+		MKFS_OPTIONS+=" -U 12345678-1234-1234-1234-123456789abc"
+		;;
+	xfs)
+		if echo "$MKFS_OPTIONS" | grep -E -q "uuid"; then
+			_notrun "Config contains mkfs uuid option"
+		fi
+		MKFS_OPTIONS+=" -m uuid=12345678-1234-1234-1234-123456789abc"
+		;;
+	btrfs)
+		if echo "$MKFS_OPTIONS" | grep -E -q "uuid|-U"; then
+			_notrun "Config contains mkfs uuid option"
+		fi
+		MKFS_OPTIONS+=" --uuid 12345678-1234-1234-1234-123456789abc"
+		;;
+	*)
+		_notrun "can't mkfs $FSTYP with uuid"
+		;;
+	esac
+	_scratch_mkfs
+}
+
 # Emulate an N-data-disk stripe w/ various stripe units
 # _scratch_mkfs_geom <sunit bytes> <swidth multiplier> [optional blocksize]
 _scratch_mkfs_geom()
