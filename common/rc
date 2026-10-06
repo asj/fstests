@@ -6065,6 +6065,37 @@ hexdump()
 	_fail "Use _hexdump(), please!"
 }
 
+# Require a filesystem whose statfs f_fsid is derived from the filesystem
+# UUID only, so that it is stable across devices and mounts.
+_require_uuid_based_fsid()
+{
+	case $FSTYP in
+	btrfs|ext4)
+		;;
+	*)
+		_notrun "Require a filesystem that derives f_fsid from the UUID only"
+		;;
+	esac
+}
+
+# Print the statfs f_fsid expected for a filesystem created with the test
+# UUID 12345678-1234-1234-1234-123456789abc.
+# Must be guarded by _require_uuid_based_fsid.
+_scratch_expected_fsid()
+{
+	case $FSTYP in
+	ext4)
+		echo "4c44000088884c44"
+		;;
+	btrfs)
+		echo "444c444c888d"
+		;;
+	*)
+		return 1
+		;;
+	esac
+}
+
 # Try to create a file with inode->i_blocks >= (length / blocksize).
 # There may be some small overhead, e.g. ext2 filesystem allocates a
 # substantial number of blocks to store block mappings. Those are accounted
