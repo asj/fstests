@@ -1,0 +1,38 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Anand Jain <asj@kernel.org>.  All Rights Reserved.
+#
+# FS QA Test No. 902
+#
+# Verify that statfs f_fsid is derived from the filesystem UUID.
+# Create a filesystem with a fixed UUID, mount it, and check that f_fsid
+# matches the expected value. Applies only to filesystems that derive
+# f_fsid from the UUID (btrfs, ext4).
+
+. ./common/preamble
+
+_begin_fstest auto quick
+
+_require_scratch
+_require_uuid_based_fsid
+
+_fixed_by_fs_commit btrfs 72de4807ba84 \
+	"btrfs: derive f_fsid with dev_t only when temp_fsid is active"
+
+_scratch_mkfs_uuid >> $seqres.full 2>&1 || _fail "mkfs failed"
+
+_scratch_mount
+
+blkid $SCRATCH_DEV >> $seqres.full
+f_fsid=$(stat -f -c "%i" $SCRATCH_MNT)
+expected=$(_scratch_expected_fsid)
+
+echo "f_fsid=$f_fsid expected=$expected" >> $seqres.full
+
+[[ $f_fsid == "$expected" ]] || _fail "f_fsid mismatch"
+
+_scratch_unmount
+
+echo "Silence is golden"
+
+_exit 0
